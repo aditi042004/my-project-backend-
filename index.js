@@ -110,9 +110,13 @@ app.post('/api/chatbot', async (req, res) => {
   try {
     let { message } = req.body;
 
-    // 🔒 Gemini hates ultra-short prompts
+    if (!message || message.trim().length === 0) {
+      return res.json({ reply: "Please type something." });
+    }
+
+    // Gemini dislikes tiny prompts
     if (message.trim().length < 5) {
-      message = `Reply politely to the user saying: "${message}"`;
+      message = `Respond politely to: "${message}"`;
     }
 
     const payload = {
@@ -121,8 +125,8 @@ app.post('/api/chatbot', async (req, res) => {
           role: "user",
           parts: [
             {
-              text: `You are SolveBot, a friendly assistant.
-Respond clearly and helpfully.
+              text: `You are SolveBot, a friendly AI assistant.
+Reply clearly and helpfully.
 
 User message:
 ${message}`
@@ -132,15 +136,18 @@ ${message}`
       ],
       generationConfig: {
         temperature: 0.7,
-        maxOutputTokens: 200
+        maxOutputTokens: 300
       }
     };
 
-    const response = await fetch(GEMINI_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      }
+    );
 
     if (!response.ok) {
       const errText = await response.text();
@@ -149,17 +156,8 @@ ${message}`
     }
 
     const data = await response.json();
+    console.log("GEMINI RESPONSE:", JSON.stringify(data, null, 2));
 
-    console.log("FULL GEMINI RESPONSE:", JSON.stringify(data, null, 2));
-
-    // 🚫 Gemini blocked the prompt
-    if (data.promptFeedback?.blockReason) {
-      return res.json({
-        reply: "⚠️ Gemini blocked this message. Try asking a clearer question."
-      });
-    }
-
-    // ✅ Normal response
     if (data.candidates?.length > 0) {
       return res.json({
         reply: data.candidates[0].content.parts[0].text
@@ -167,11 +165,11 @@ ${message}`
     }
 
     return res.json({
-      reply: "⚠️ Gemini returned no content. Try asking a full question."
+      reply: "⚠️ Gemini returned no content. Try a different question."
     });
 
   } catch (err) {
-    console.error("Chatbot error:", err);
+    console.error("Chatbot backend error:", err);
     res.status(500).json({ reply: "Backend error" });
   }
 });
