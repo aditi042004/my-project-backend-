@@ -6,6 +6,8 @@ const multer = require('multer');
 const csv = require('csv-parser');
 const { Readable } = require('stream');
 const natural = require('natural');
+const fetch = require('node-fetch');
+
 
 const app = express();
 const PORT = process.env.PORT || 10000;
