@@ -6,7 +6,6 @@ const multer = require('multer');
 const csv = require('csv-parser');
 const { Readable } = require('stream');
 const natural = require('natural');
-const fetch = require('node-fetch');
 
 
 const app = express();
@@ -42,7 +41,8 @@ if (!GEMINI_API_KEY) {
 // const GEMINI_API_URL =
 //   `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
 const GEMINI_API_URL =
-  `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
+  `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${process.env.GEMINI_API_KEY}`;
+
 
 /* -------------------- NLP Endpoint -------------------- */
 app.post('/api/nlp', upload.single('csvfile'), (req, res) => {
@@ -110,53 +110,41 @@ app.post('/api/nlp', upload.single('csvfile'), (req, res) => {
 
 /* -------------------- Chatbot Endpoint -------------------- */
 app.post('/api/chatbot', async (req, res) => {
-  const { message, language } = req.body;
-
   try {
-    const prompt =
-      language === 'hi'
-        ? `Reply in simple Hindi:\n${message}`
-        : `Reply in simple English:\n${message}`;
+    const { message } = req.body;
 
     const payload = {
       contents: [
         {
-          role: "user",
-          parts: [{ text: prompt }]
+          parts: [{ text: message }]
         }
-      ],
-      safetySettings: [
-        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-      ],
-      generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 300
-      }
+      ]
     };
 
     const response = await fetch(GEMINI_API_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json"
+      },
       body: JSON.stringify(payload)
     });
 
-    const data = await response.json();
+    const text = await response.text();
+    console.log("RAW GEMINI RESPONSE:", text);
 
-    console.log("Gemini raw response:", JSON.stringify(data, null, 2));
+    const data = JSON.parse(text);
 
-    if (data.candidates?.length > 0) {
-      const reply = data.candidates[0].content.parts[0].text;
-      return res.json({ reply });
+    if (data.candidates && data.candidates.length > 0) {
+      return res.json({
+        reply: data.candidates[0].content.parts[0].text
+      });
     }
 
-    res.json({ reply: "⚠️ Gemini returned no content." });
+    res.json({ reply: "⚠️ Gemini returned empty response." });
 
   } catch (err) {
-    console.error("Chatbot Error:", err);
-    res.status(500).json({ reply: "Gemini failed." });
+    console.error("Chatbot error:", err);
+    res.status(500).json({ reply: "Backend error" });
   }
 });
 
