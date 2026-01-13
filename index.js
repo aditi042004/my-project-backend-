@@ -6,7 +6,7 @@ const multer = require('multer');
 const csv = require('csv-parser');
 const { Readable } = require('stream');
 const natural = require('natural');
-
+const fetch = require('node-fetch'); // ✅ REQUIRED
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -38,13 +38,8 @@ if (!GEMINI_API_KEY) {
   process.exit(1);
 }
 
-// const GEMINI_API_URL =
-//   `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-// const GEMINI_API_URL =
-//   `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${process.env.GEMINI_API_KEY}`;
-
 const GEMINI_API_URL =
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
 
 /* -------------------- NLP Endpoint -------------------- */
 app.post('/api/nlp', upload.single('csvfile'), (req, res) => {
@@ -121,7 +116,11 @@ app.post('/api/chatbot', async (req, res) => {
           role: "user",
           parts: [{ text: message }]
         }
-      ]
+      ],
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 300
+      }
     };
 
     const response = await fetch(GEMINI_API_URL, {
@@ -131,6 +130,13 @@ app.post('/api/chatbot', async (req, res) => {
       },
       body: JSON.stringify(payload)
     });
+
+    /* ✅ REQUIRED ERROR HANDLING (YOU ASKED FOR THIS) */
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("Gemini HTTP error:", errText);
+      return res.status(500).json({ reply: "Gemini API error" });
+    }
 
     const data = await response.json();
 
