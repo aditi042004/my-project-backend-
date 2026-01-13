@@ -6,8 +6,7 @@ const multer = require('multer');
 const csv = require('csv-parser');
 const { Readable } = require('stream');
 const natural = require('natural');
-const fetch = require('node-fetch');
-const { youtube } = require('youtube-sr');
+const fetch = require('node-fetch'); // ✅ ONLY ONCE
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -20,15 +19,13 @@ app.use(cors({
   ]
 }));
 
-app.use(express.json());   // ✅ MUST BE HERE
+app.use(express.json()); // ✅ MUST BE BEFORE ROUTES
 
 app.get('/test', (req, res) => {
-  res.json({ message: 'Backend running locally' });
+  res.json({ message: 'Backend running' });
 });
 
-
-
-
+/* -------------------- Multer & NLP Setup -------------------- */
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 const stemmer = natural.PorterStemmer;
@@ -146,7 +143,6 @@ app.post('/api/chatbot', async (req, res) => {
   let userQuery = message;
   let isDefinition = false;
   let wordToPronounce = "";
-  let videos = [];
 
   const wordCount = message.trim().split(/\s+/).length;
   const targetLanguage = language === 'hi' ? 'Hindi' : 'English';
@@ -171,30 +167,14 @@ app.post('/api/chatbot', async (req, res) => {
     });
 
     const data = await response.json();
-    const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "No response";
+    const reply =
+      data?.candidates?.[0]?.content?.parts?.[0]?.text || "No response from Gemini";
 
-    res.json({ reply, isDefinition, word: wordToPronounce, videos });
+    res.json({ reply, isDefinition, word: wordToPronounce });
 
   } catch (err) {
     console.error("Chatbot Error:", err);
     res.status(500).json({ reply: "Gemini failed." });
-  }
-});
-
-/* -------------------- Text-to-Speech Endpoint -------------------- */
-app.post('/api/tts', async (req, res) => {
-  const { text } = req.body;
-  if (!text) return res.status(400).json({ error: 'No text provided.' });
-
-  try {
-    // Gemini TTS is unstable → return phonetic text instead
-    res.json({
-      audioContent: null,
-      note: "Use browser SpeechSynthesis API for audio playback.",
-      text
-    });
-  } catch (err) {
-    res.status(500).json({ error: 'TTS failed.' });
   }
 });
 
