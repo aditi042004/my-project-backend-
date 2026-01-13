@@ -39,8 +39,10 @@ if (!GEMINI_API_KEY) {
   process.exit(1);
 }
 
+// const GEMINI_API_URL =
+//   `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
 const GEMINI_API_URL =
-  `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+  `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
 
 /* -------------------- NLP Endpoint -------------------- */
 app.post('/api/nlp', upload.single('csvfile'), (req, res) => {
@@ -111,22 +113,26 @@ app.post('/api/chatbot', async (req, res) => {
   const { message, language } = req.body;
 
   try {
-    const systemInstruction =
+    const prompt =
       language === 'hi'
-        ? "You are SolveBot. Answer politely in simple Hindi."
-        : "You are SolveBot. Answer politely in simple English.";
+        ? `Reply in simple Hindi:\n${message}`
+        : `Reply in simple English:\n${message}`;
 
     const payload = {
-      systemInstruction: {
-        parts: [{ text: systemInstruction }]
-      },
       contents: [
         {
-          parts: [{ text: message }]
+          role: "user",
+          parts: [{ text: prompt }]
         }
       ],
+      safetySettings: [
+        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+      ],
       generationConfig: {
-        temperature: 0.6,
+        temperature: 0.7,
         maxOutputTokens: 300
       }
     };
@@ -139,19 +145,11 @@ app.post('/api/chatbot', async (req, res) => {
 
     const data = await response.json();
 
-    // 🔍 FULL DEBUG
     console.log("Gemini raw response:", JSON.stringify(data, null, 2));
 
     if (data.candidates?.length > 0) {
       const reply = data.candidates[0].content.parts[0].text;
       return res.json({ reply });
-    }
-
-    // Safety / block case
-    if (data.promptFeedback) {
-      return res.json({
-        reply: "⚠️ Gemini could not answer this. Please rephrase."
-      });
     }
 
     res.json({ reply: "⚠️ Gemini returned no content." });
