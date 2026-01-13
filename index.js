@@ -111,20 +111,22 @@ app.post('/api/chatbot', async (req, res) => {
   const { message, language } = req.body;
 
   try {
-    const prompt =
+    const systemInstruction =
       language === 'hi'
-        ? `Answer in simple Hindi:\n${message}`
-        : message;
+        ? "You are SolveBot. Answer politely in simple Hindi."
+        : "You are SolveBot. Answer politely in simple English.";
 
     const payload = {
+      systemInstruction: {
+        parts: [{ text: systemInstruction }]
+      },
       contents: [
         {
-          role: "user",
-          parts: [{ text: prompt }]
+          parts: [{ text: message }]
         }
       ],
       generationConfig: {
-        temperature: 0.7,
+        temperature: 0.6,
         maxOutputTokens: 300
       }
     };
@@ -137,18 +139,18 @@ app.post('/api/chatbot', async (req, res) => {
 
     const data = await response.json();
 
-    // 🔍 DEBUG LOG (VERY IMPORTANT)
+    // 🔍 FULL DEBUG
     console.log("Gemini raw response:", JSON.stringify(data, null, 2));
 
-    if (data.candidates && data.candidates.length > 0) {
+    if (data.candidates?.length > 0) {
       const reply = data.candidates[0].content.parts[0].text;
       return res.json({ reply });
     }
 
-    // ⚠️ Gemini blocked / filtered response
+    // Safety / block case
     if (data.promptFeedback) {
       return res.json({
-        reply: "⚠️ Gemini blocked this response. Please rephrase your question."
+        reply: "⚠️ Gemini could not answer this. Please rephrase."
       });
     }
 
