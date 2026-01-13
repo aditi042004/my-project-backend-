@@ -108,30 +108,40 @@ app.post('/api/nlp', upload.single('csvfile'), (req, res) => {
 /* -------------------- Chatbot Endpoint -------------------- */
 app.post('/api/chatbot', async (req, res) => {
   try {
-    const { message } = req.body;
+    let { message } = req.body;
+
+    // 🔒 Gemini hates ultra-short prompts
+    if (message.trim().length < 5) {
+      message = `Reply politely to the user saying: "${message}"`;
+    }
 
     const payload = {
       contents: [
         {
           role: "user",
-          parts: [{ text: message }]
+          parts: [
+            {
+              text: `You are SolveBot, a friendly assistant.
+Respond clearly and helpfully.
+
+User message:
+${message}`
+            }
+          ]
         }
       ],
       generationConfig: {
         temperature: 0.7,
-        maxOutputTokens: 300
+        maxOutputTokens: 200
       }
     };
 
     const response = await fetch(GEMINI_API_URL, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
 
-    /* ✅ REQUIRED ERROR HANDLING (YOU ASKED FOR THIS) */
     if (!response.ok) {
       const errText = await response.text();
       console.error("Gemini HTTP error:", errText);
@@ -140,16 +150,24 @@ app.post('/api/chatbot', async (req, res) => {
 
     const data = await response.json();
 
-    console.log("GEMINI RESPONSE:", JSON.stringify(data, null, 2));
+    console.log("FULL GEMINI RESPONSE:", JSON.stringify(data, null, 2));
 
-    if (data.candidates?.length) {
+    // 🚫 Gemini blocked the prompt
+    if (data.promptFeedback?.blockReason) {
+      return res.json({
+        reply: "⚠️ Gemini blocked this message. Try asking a clearer question."
+      });
+    }
+
+    // ✅ Normal response
+    if (data.candidates?.length > 0) {
       return res.json({
         reply: data.candidates[0].content.parts[0].text
       });
     }
 
     return res.json({
-      reply: "⚠️ Gemini did not return text. Try rephrasing."
+      reply: "⚠️ Gemini returned no content. Try asking a full question."
     });
 
   } catch (err) {
@@ -157,6 +175,7 @@ app.post('/api/chatbot', async (req, res) => {
     res.status(500).json({ reply: "Backend error" });
   }
 });
+
 
 /* -------------------- Server -------------------- */
 app.listen(PORT, () => {
