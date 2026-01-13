@@ -6,10 +6,9 @@ const multer = require('multer');
 const csv = require('csv-parser');
 const { Readable } = require('stream');
 const natural = require('natural');
-const fetch = require('node-fetch'); // ✅ ONLY ONCE
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 10000;
 
 /* -------------------- Middleware -------------------- */
 app.use(cors({
@@ -19,13 +18,13 @@ app.use(cors({
   ]
 }));
 
-app.use(express.json()); // ✅ MUST BE BEFORE ROUTES
+app.use(express.json());
 
 app.get('/test', (req, res) => {
   res.json({ message: 'Backend running' });
 });
 
-/* -------------------- Multer & NLP Setup -------------------- */
+/* -------------------- File Upload -------------------- */
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 const stemmer = natural.PorterStemmer;
@@ -54,110 +53,64 @@ app.post('/api/nlp', upload.single('csvfile'), (req, res) => {
       const word = row.Word;
       const baseForm = row['Base Form'];
       const meaning = row.Meaning;
-
       if (!word || !baseForm) return;
 
       let processed = {};
 
       switch (action) {
         case 'Tokenization':
-          processed = { "Character Tokens": word.split('') };
+          processed = { tokens: word.split('') };
           break;
 
         case 'Lemmatization':
-          processed = { Lemma: baseForm };
+          processed = { lemma: baseForm };
           break;
 
         case 'Stemming':
-          processed = { Stem: stemmer.stem(word) };
+          processed = { stem: stemmer.stem(word) };
           break;
 
         case 'Stopword Removal':
-          const isStopword = natural.stopwords.includes(word.toLowerCase());
           processed = {
-            "Is Stopword": isStopword,
-            "Explanation": isStopword
-              ? `'${word}' is a common stopword.`
-              : `'${word}' is not a stopword.`
+            isStopword: natural.stopwords.includes(word.toLowerCase())
           };
-          break;
-
-        case 'Morphological Analysis':
-          let affix = 'None';
-          if (word.endsWith('ing')) affix = '-ing (Gerund)';
-          else if (word.endsWith('ed')) affix = '-ed (Past)';
-          else if (word.endsWith('s') && word.length > baseForm.length) affix = '-s (Plural)';
-          processed = { Stem: baseForm, Affix: affix };
           break;
 
         case 'Sentiment Analysis':
           if (!meaning) {
-            processed = { Sentiment: 'N/A', Score: 0 };
+            processed = { sentiment: 'N/A', score: 0 };
             break;
           }
           const tokenizer = new natural.WordTokenizer();
-          const analyzer = new natural.SentimentAnalyzer("English", stemmer, "afinn");
+          const analyzer = new natural.SentimentAnalyzer(
+            "English",
+            stemmer,
+            "afinn"
+          );
           const score = analyzer.getSentiment(tokenizer.tokenize(meaning));
           processed = {
-            Sentiment: score > 0 ? 'Positive' : score < 0 ? 'Negative' : 'Neutral',
-            Score: score.toFixed(4)
+            sentiment: score > 0 ? 'Positive' : score < 0 ? 'Negative' : 'Neutral',
+            score
           };
           break;
 
         default:
-          processed = { Error: "Action not recognized." };
+          processed = { error: 'Unknown action' };
       }
 
-      results.push({ original: word, processed });
+      results.push({ word, processed });
     })
     .on('end', () => res.json(results))
-    .on('error', () => res.status(500).json({ error: 'CSV processing failed.' }));
-});
-
-/* -------------------- Game Data Endpoint -------------------- */
-app.post('/api/load-game-data', upload.single('csvfile'), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
-
-  const gameData = [];
-
-  Readable.from(req.file.buffer.toString())
-    .pipe(csv())
-    .on('data', row => {
-      if (row.Word && row['Base Form'] && row.Meaning) {
-        gameData.push({
-          word: row.Word,
-          baseForm: row['Base Form'],
-          meaning: row.Meaning
-        });
-      }
-    })
-    .on('end', () => res.json(gameData))
-    .on('error', () => res.status(500).json({ error: 'Game CSV failed.' }));
+    .on('error', () => res.status(500).json({ error: 'CSV error' }));
 });
 
 /* -------------------- Chatbot Endpoint -------------------- */
 app.post('/api/chatbot', async (req, res) => {
   const { message, language } = req.body;
 
-  let systemInstruction = "You are SolveBot, a helpful study assistant.";
-  let userQuery = message;
-  let isDefinition = false;
-  let wordToPronounce = "";
-
-  const wordCount = message.trim().split(/\s+/).length;
-  const targetLanguage = language === 'hi' ? 'Hindi' : 'English';
-
-  if (wordCount <= 3) {
-    systemInstruction += " Give meaning and an example sentence.";
-    userQuery = `What is the meaning of "${message}" in ${targetLanguage}?`;
-    isDefinition = true;
-    wordToPronounce = message;
-  }
-
   try {
     const payload = {
-      contents: [{ parts: [{ text: userQuery }] }],
-      systemInstruction: { parts: [{ text: systemInstruction }] }
+      contents: [{ parts: [{ text: message }] }]
     };
 
     const response = await fetch(GEMINI_API_URL, {
@@ -168,9 +121,10 @@ app.post('/api/chatbot', async (req, res) => {
 
     const data = await response.json();
     const reply =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text || "No response from Gemini";
+      data.candidates?.[0]?.content?.parts?.[0]?.text ||
+      "No response from Gemini";
 
-    res.json({ reply, isDefinition, word: wordToPronounce });
+    res.json({ reply });
 
   } catch (err) {
     console.error("Chatbot Error:", err);
@@ -180,5 +134,5 @@ app.post('/api/chatbot', async (req, res) => {
 
 /* -------------------- Server -------------------- */
 app.listen(PORT, () => {
-  console.log(`✅ Server running on http://localhost:${PORT}`);
+  console.log(`✅ Server running on port ${PORT}`);
 });
