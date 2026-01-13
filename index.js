@@ -40,9 +40,11 @@ if (!GEMINI_API_KEY) {
 
 // const GEMINI_API_URL =
 //   `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-const GEMINI_API_URL =
-  `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${process.env.GEMINI_API_KEY}`;
+// const GEMINI_API_URL =
+//   `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${process.env.GEMINI_API_KEY}`;
 
+const GEMINI_API_URL =
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
 
 /* -------------------- NLP Endpoint -------------------- */
 app.post('/api/nlp', upload.single('csvfile'), (req, res) => {
@@ -116,6 +118,7 @@ app.post('/api/chatbot', async (req, res) => {
     const payload = {
       contents: [
         {
+          role: "user",
           parts: [{ text: message }]
         }
       ]
@@ -129,25 +132,25 @@ app.post('/api/chatbot', async (req, res) => {
       body: JSON.stringify(payload)
     });
 
-    const text = await response.text();
-    console.log("RAW GEMINI RESPONSE:", text);
+    const data = await response.json();
 
-    const data = JSON.parse(text);
+    console.log("GEMINI RESPONSE:", JSON.stringify(data, null, 2));
 
-    if (data.candidates && data.candidates.length > 0) {
+    if (data.candidates?.length) {
       return res.json({
         reply: data.candidates[0].content.parts[0].text
       });
     }
 
-    res.json({ reply: "⚠️ Gemini returned empty response." });
+    return res.json({
+      reply: "⚠️ Gemini did not return text. Try rephrasing."
+    });
 
   } catch (err) {
     console.error("Chatbot error:", err);
     res.status(500).json({ reply: "Backend error" });
   }
 });
-
 
 /* -------------------- Server -------------------- */
 app.listen(PORT, () => {
