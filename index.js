@@ -109,28 +109,55 @@ app.post('/api/chatbot', async (req, res) => {
   const { message, language } = req.body;
 
   try {
+    const prompt =
+      language === 'hi'
+        ? `Answer in simple Hindi:\n${message}`
+        : message;
+
     const payload = {
-      contents: [{ parts: [{ text: message }] }]
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: prompt }]
+        }
+      ],
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 300
+      }
     };
 
     const response = await fetch(GEMINI_API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
 
     const data = await response.json();
-    const reply =
-      data.candidates?.[0]?.content?.parts?.[0]?.text ||
-      "No response from Gemini";
 
-    res.json({ reply });
+    // 🔍 DEBUG LOG (VERY IMPORTANT)
+    console.log("Gemini raw response:", JSON.stringify(data, null, 2));
+
+    if (data.candidates && data.candidates.length > 0) {
+      const reply = data.candidates[0].content.parts[0].text;
+      return res.json({ reply });
+    }
+
+    // ⚠️ Gemini blocked / filtered response
+    if (data.promptFeedback) {
+      return res.json({
+        reply: "⚠️ Gemini blocked this response. Please rephrase your question."
+      });
+    }
+
+    res.json({ reply: "⚠️ Gemini returned no content." });
 
   } catch (err) {
     console.error("Chatbot Error:", err);
     res.status(500).json({ reply: "Gemini failed." });
   }
 });
+
 
 /* -------------------- Server -------------------- */
 app.listen(PORT, () => {
