@@ -7,7 +7,7 @@ const csv = require("csv-parser");
 const { Readable } = require("stream");
 const natural = require("natural");
 
-// ---- FIX: fetch for all Node versions ----
+// ---- fetch FIX (node 16/18 compatible) ----
 const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
@@ -102,11 +102,7 @@ app.post("/api/nlp", upload.single("csvfile"), (req, res) => {
           processed = { error: "Unknown action" };
       }
 
-      results.push({
-        word,
-        meaning,
-        processed,
-      });
+      results.push({ word, meaning, processed });
     })
     .on("end", () => res.json(results))
     .on("error", () =>
@@ -133,7 +129,7 @@ app.post("/api/load-game-data", upload.single("csvfile"), (req, res) => {
     .on("error", () => res.json([]));
 });
 
-/* -------------------- CHATBOT (FIXED + FREE) -------------------- */
+/* -------------------- CHATBOT (FINAL FIXED VERSION) -------------------- */
 app.post("/api/chatbot", async (req, res) => {
   try {
     const { message, language } = req.body;
@@ -164,7 +160,7 @@ app.post("/api/chatbot", async (req, res) => {
           messages: [
             {
               role: "system",
-              content: "You are SolveBot, a helpful AI assistant.",
+              content: "You are SolveBot, a friendly and helpful AI assistant.",
             },
             {
               role: "user",
@@ -181,14 +177,21 @@ app.post("/api/chatbot", async (req, res) => {
     console.log("🧠 GROQ RAW:", raw);
 
     if (!response.ok) {
+      console.error("❌ GROQ HTTP ERROR:", raw);
       return res.json({ reply: "AI service error. Try again." });
     }
 
-    const data = JSON.parse(raw);
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      return res.json({ reply: "AI response parsing failed." });
+    }
+
     const reply = data?.choices?.[0]?.message?.content;
 
     return res.json({
-      reply: reply || "No response from AI.",
+      reply: reply || "AI did not return a response.",
     });
   } catch (err) {
     console.error("🔥 CHATBOT ERROR:", err);
