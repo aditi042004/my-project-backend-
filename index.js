@@ -134,7 +134,7 @@ app.post("/api/chatbot", async (req, res) => {
   try {
     const { message, language } = req.body;
 
-    if (!message || message.trim() === "") {
+    if (!message || !message.trim()) {
       return res.json({ reply: "Please type something." });
     }
 
@@ -156,36 +156,34 @@ app.post("/api/chatbot", async (req, res) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "llama-3.1-8b-instant",
+          model: "llama-3.1-8b-instant", // ✅ FIXED
           messages: [
             { role: "system", content: "You are SolveBot, a helpful AI assistant." },
             { role: "user", content: prompt }
           ],
           temperature: 0.6,
           max_tokens: 300,
-          stream: false
         }),
       }
     );
 
     const data = await response.json();
-    console.log("🧠 GROQ RESPONSE:", data);
 
     if (!response.ok) {
-      return res.json({
-        reply: data?.error?.message || "AI service error. Try again."
-      });
+      console.error("❌ GROQ ERROR:", data);
+      return res.json({ reply: "AI service error. Try again." });
     }
 
-    return res.json({
-      reply: data.choices?.[0]?.message?.content || "No response from AI."
+    res.json({
+      reply: data?.choices?.[0]?.message?.content || "No response from AI.",
     });
 
   } catch (err) {
     console.error("🔥 CHATBOT ERROR:", err);
-    return res.json({ reply: "AI service is temporarily unavailable." });
+    res.json({ reply: "AI service is temporarily unavailable." });
   }
 });
+
 /* -------------------- SERVER -------------------- */
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
